@@ -2,7 +2,6 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import fs from "fs";
 import config from "./config.js";
 import authenticateUser from "./middlewares/authentication.js";
 import path from 'path';
@@ -54,27 +53,18 @@ app.use(cors({
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const frontendDir = path.join(__dirname, "..", "frontend");
 
-if (fs.existsSync(frontendDir)) {
-  app.use(express.static(frontendDir));
-}
+app.get("/", (req, res) => {
+  res.json({ message: "Restaurant Management System API" });
+});
 
-app.get(["/", "/api"], (req, res) => {
+app.get("/api", (req, res) => {
   res.json({ message: "Restaurant Management System API" });
 });
 
 app.use(authenticateUser);
 app.use((req, res, next) => {
-  const isApiRoute =
-    req.path.startsWith("/register") ||
-    req.path.startsWith("/login") ||
-    req.path.startsWith("/orders") ||
-    req.path.startsWith("/catalog") ||
-    req.path.startsWith("/dishes") ||
-    req.path.startsWith("/reviews") ||
-    req.path.startsWith("/admin") ||
-    req.path.startsWith("/payments");
+  const isApiRoute = req.path.startsWith("/api");
 
   if (isApiRoute && !isDatabaseReady) {
     return res.status(503).json({
@@ -84,23 +74,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(authRoutes);
 app.use('/api', authRoutes);
-app.use(catalogRoutes);
 app.use('/api', catalogRoutes);
-app.use(orderRoutes);
 app.use('/api', orderRoutes);
-app.use(paymentRoutes);
 app.use('/api', paymentRoutes);
-app.use(tableRoutes);
 app.use('/api', tableRoutes);
-app.use(tableReservationRoutes);
 app.use('/api', tableReservationRoutes);
-app.use(dishRoutes);
 app.use('/api', dishRoutes);
-app.use(reviewRoutes);
 app.use('/api', reviewRoutes);
-app.use(adminRoutes);
 app.use('/api', adminRoutes);
 
 app.use((req, res) => {
