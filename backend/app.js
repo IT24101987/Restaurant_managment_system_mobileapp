@@ -23,19 +23,25 @@ let isDatabaseReady = false;
 if (!config.mongodbURI) {
   console.error("MONGODB_URI is missing. Set it in backend/.env or in Vercel environment variables.");
 } else {
-  mongoose.connect(config.mongodbURI)
-    .then(() => {
-      isDatabaseReady = true;
-      console.log("MongoDB connected");
-    })
-    .catch((err) => {
-      isDatabaseReady = false;
-      console.error("MongoDB connection failed:", err.message);
-    });
-}
+  // For serverless, connect to database on each request if not already connected
+  const connectDB = async () => {
+    if (mongoose.connection.readyState === 0) {
+      try {
+        await mongoose.connect(config.mongodbURI);
+        isDatabaseReady = true;
+        console.log("MongoDB connected");
+      } catch (err) {
+        isDatabaseReady = false;
+        console.error("MongoDB connection failed:", err.message);
+      }
+    } else {
+      isDatabaseReady = mongoose.connection.readyState === 1;
+    }
+  };
 
-mongoose.connection.on("disconnected", () => { isDatabaseReady = false; });
-mongoose.connection.on("connected", () => { isDatabaseReady = true; });
+  // Connect immediately
+  connectDB();
+}
 
 app.use(express.json({ limit: "15mb" }));
 
@@ -47,10 +53,17 @@ app.use((req, res, next) => {
 
 const allowLocalhostPort = /^http:\/\/localhost:517\d$/;
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, etc.)
     if (!origin) return callback(null, true);
+
+    // Allow configured origins
     if (config.corsOrigins.includes(origin)) return callback(null, true);
+
+    // Allow localhost development
     if (allowLocalhostPort.test(origin)) return callback(null, true);
+
+    // Block other origins
     return callback(new Error("CORS blocked"), false);
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -93,14 +106,15 @@ app.use((req, res, next) => {
 
 // app.use('/api', authRoutes);
 app.use('/api', authRoutes);
-app.use('/api', catalogRoutes);
-app.use('/api', orderRoutes);
-app.use('/api', paymentRoutes);
-app.use('/api', tableRoutes);
-app.use('/api', tableReservationRoutes);
-app.use('/api', dishRoutes);
-app.use('/api', reviewRoutes);
-app.use('/api', adminRoutes);
+// Temporarily comment out all routes for debugging
+// app.use('/api', catalogRoutes);
+// app.use('/api', orderRoutes);
+// app.use('/api', paymentRoutes);
+// app.use('/api', tableRoutes);
+// app.use('/api', tableReservationRoutes);
+// app.use('/api', dishRoutes);
+// app.use('/api', reviewRoutes);
+// app.use('/api', adminRoutes);
 
 // Add catch-all route for debugging
 app.use('*', (req, res) => {

@@ -33,14 +33,13 @@ Set these in your Vercel project settings:
 
 After deployment, test these endpoints:
 
-- `https://your-app.vercel.app/api/health` - Health check
-- `https://your-app.vercel.app/api/test` - Test route
-- `https://your-app.vercel.app/api/login` - Login endpoint (auth routes re-enabled)
-- `https://your-app.vercel.app/api/register` - Registration endpoint
+- `https://your-app.vercel.app/api/health` - Health check (if routes enabled)
+- `https://your-app.vercel.app/api/test` - Test route (if routes enabled)
+- `https://your-app.vercel.app/any-path` - Should return serverless function response
 
 ### Current Status
 
-**Debugging Mode**: Root route handler removed, added request logging and catch-all route for debugging. Authentication middleware disabled.
+**Minimal Testing Mode**: Serverless function simplified to basic handler. All routes and complex middleware disabled for debugging.
 
 ### Local Development
 
@@ -53,10 +52,10 @@ npm start    # Production
 
 ### Project Structure
 
-- `backend/api/index.js` - Vercel serverless function entry point
+- `api/index.js` - Vercel serverless function entry point (in repository root)
 - `backend/app.js` - Express application setup
 - `backend/routes/` - API route handlers
 - `backend/models/` - MongoDB models
 - `backend/middlewares/` - Authentication and other middleware
 - `backend/controllers/` - Route controllers
-- `vercel.json` - Vercel deployment configuration
+- `vercel.json` - Vercel deployment configuration (in repository root)
