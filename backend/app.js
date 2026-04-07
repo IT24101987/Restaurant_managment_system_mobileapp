@@ -57,7 +57,7 @@ const __dirname = path.dirname(__filename);
 const frontendDir = path.join(__dirname, "..", "frontend");
 
 app.use((req, res, next) => {
-  if (req.url.startsWith("/api")) {
+  while (req.url === "/api" || req.url.startsWith("/api/")) {
     req.url = req.url.replace(/^\/api/, "") || "/";
   }
   next();
