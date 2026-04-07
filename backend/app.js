@@ -117,10 +117,10 @@ app.use('/api', authRoutes);
 // app.use('/api', adminRoutes);
 
 // Add catch-all route for debugging
-app.use('*', (req, res) => {
-  console.log(`Catch-all: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ message: "Route not found", path: req.originalUrl });
-});
+// app.use('*', (req, res) => {
+//   console.log(`Catch-all: ${req.method} ${req.originalUrl}`);
+//   res.status(404).json({ message: "Route not found", path: req.originalUrl });
+// });
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
