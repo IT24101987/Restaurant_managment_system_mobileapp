@@ -3,17 +3,18 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/backend/api/index.js"
+      "destination": "/api/index.js"
     },
     {
       "source": "/(.*)",
-      "destination": "/backend/api/index.js"
+      "destination": "/api/index.js"
     }
   ],
   "functions": {
-    "backend/api/index.js": {
+    "api/index.js": {
       "runtime": "nodejs22.x",
       "maxDuration": 10
     }
   }
 }
+
