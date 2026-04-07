@@ -2,112 +2,121 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import config from "./config.js";
-import authenticateUser from "./middlewares/authentication.js";
-import path from 'path';
-import { fileURLToPath } from 'url';
-import authRoutes from "./routes/authRoutes.js";
-import catalogRoutes from "./routes/catalogRoutes.js";
-import orderRoutes from "./routes/orderRoutes.js";
-import paymentRoutes from "./routes/paymentRoutes.js";
-import tableRoutes from "./routes/tableRoutes.js";
-import tableReservationRoutes from "./routes/tableReservationRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import dishRoutes from "./routes/dishRoutes.js";
-import reviewRoutes from "./routes/reviewRoutes.js";
+import config from "../config.js";
+import authenticateUser from "../middlewares/authentication.js";
+import authRoutes from "../routes/authRoutes.js";
+import catalogRoutes from "../routes/catalogRoutes.js";
+import orderRoutes from "../routes/orderRoutes.js";
+import paymentRoutes from "../routes/paymentRoutes.js";
+import tableRoutes from "../routes/tableRoutes.js";
+import tableReservationRoutes from "../routes/tableReservationRoutes.js";
+import adminRoutes from "../routes/adminRoutes.js";
+import dishRoutes from "../routes/dishRoutes.js";
+import reviewRoutes from "../routes/reviewRoutes.js";
 
 const app = express();
 
+// Track database connection status
 let isDatabaseReady = false;
 
+// MongoDB connection
 if (!config.mongodbURI) {
-  console.error("MONGODB_URI is missing. Set it in backend/.env and restart the server.");
+  console.error("MONGODB_URI is missing. Add it in backend/.env");
 } else {
-  mongoose.connect(config.mongodbURI)
+  mongoose
+    .connect(config.mongodbURI)
     .then(() => {
       isDatabaseReady = true;
       console.log("MongoDB connected");
     })
     .catch((err) => {
       isDatabaseReady = false;
-      console.error("MongoDB connection failed:", err.message);
+      console.error("MongoDB connection error:", err.message);
     });
 }
-mongoose.connection.on("disconnected", () => { isDatabaseReady = false; });
-mongoose.connection.on("connected", () => { isDatabaseReady = true; });
 
+mongoose.connection.on("connected", () => (isDatabaseReady = true));
+mongoose.connection.on("disconnected", () => (isDatabaseReady = false));
+
+// Middleware
 app.use(express.json({ limit: "15mb" }));
 
-// CORS — restrict to allowed origins
+// Allow localhost + configured origins
 const allowLocalhostPort = /^http:\/\/localhost:517\d$/;
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (config.corsOrigins.includes(origin)) return callback(null, true);
-    if (allowLocalhostPort.test(origin)) return callback(null, true);
-    return callback(new Error("CORS blocked"), false);
-  },
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization"]
-}));
 
-// Rate limiting on auth endpoints
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // mobile apps or postman
+      if (config.corsOrigins.includes(origin)) return callback(null, true);
+      if (allowLocalhostPort.test(origin)) return callback(null, true);
+      return callback(new Error("CORS blocked"), false);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization"],
+  })
+);
+
+// Rate limiter for login/register
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 20, 
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   message: { message: "Too many attempts. Please try again after 15 minutes." },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
-app.use("/login", authLimiter);
-app.use("/register", authLimiter);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const frontendDir = path.join(__dirname, "..", "frontend");
-app.use(express.static(frontendDir));
+app.use("/api/login", authLimiter);
+app.use("/api/register", authLimiter);
 
+// JWT Authentication Middleware
 app.use(authenticateUser);
+
+// Check DB ready before API requests
 app.use((req, res, next) => {
-  const isApiRoute =
-    req.path.startsWith("/register") ||
-    req.path.startsWith("/login") ||
-    req.path.startsWith("/orders") ||
-    req.path.startsWith("/catalog") ||
-    req.path.startsWith("/dishes") ||
-    req.path.startsWith("/reviews") ||
-    req.path.startsWith("/admin") ||
-    req.path.startsWith("/payments");
+  const apiRoutes = [
+    "/api/register",
+    "/api/login",
+    "/api/orders",
+    "/api/catalog",
+    "/api/dishes",
+    "/api/reviews",
+    "/api/admin",
+    "/api/payments",
+  ];
+
+  const isApiRoute = apiRoutes.some((r) => req.path.startsWith(r));
 
   if (isApiRoute && !isDatabaseReady) {
     return res.status(503).json({
-      message: "Database is not connected. Set MONGODB_URI and restart backend."
+      message: "Database is not connected. Set MONGODB_URI and restart.",
     });
   }
+
   next();
 });
 
-app.use(authRoutes);
-app.use(catalogRoutes);
-app.use(orderRoutes);
-app.use(paymentRoutes);
-app.use(tableRoutes);
-app.use(tableReservationRoutes);
-app.use(dishRoutes);
-app.use(reviewRoutes);
-app.use(adminRoutes);
+// Mount your routes under /api
+app.use("/api", authRoutes);
+app.use("/api", catalogRoutes);
+app.use("/api", orderRoutes);
+app.use("/api", paymentRoutes);
+app.use("/api", tableRoutes);
+app.use("/api", tableReservationRoutes);
+app.use("/api", dishRoutes);
+app.use("/api", reviewRoutes);
+app.use("/api", adminRoutes);
 
-// 404 handler
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error("ERROR:", err.stack);
   res.status(500).json({ message: "Internal server error" });
 });
 
-app.listen(config.port, () => {
-  console.log(`Server started on port ${config.port}`);
-});
+
+export default app; 
