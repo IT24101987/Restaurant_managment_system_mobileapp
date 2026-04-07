@@ -74,9 +74,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Temporarily remove root route handler for debugging
-// app.get("/", (req, res) => {
-//   res.json({ message: "Restaurant Management System API" });
-// });
+app.get("/", (req, res) => {
+  res.json({ message: "Restaurant Management System API" });
+});
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -92,20 +92,42 @@ app.get("/api/test", (req, res) => {
 
 
 // app.use(authenticateUser);
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   const isApiRoute = req.path.startsWith("/api");
 
   if (isApiRoute && !isDatabaseReady) {
-    return res.status(503).json({
-      message: "Database is not connected. Set MONGODB_URI and restart backend."
-    });
+    // Try to connect if not ready
+    if (mongoose.connection.readyState === 0 && config.mongodbURI) {
+      try {
+        await mongoose.connect(config.mongodbURI);
+        isDatabaseReady = true;
+        console.log("MongoDB connected on request");
+      } catch (err) {
+        isDatabaseReady = false;
+        console.error("MongoDB connection failed:", err.message);
+        return res.status(503).json({
+          message: "Database is not connected. Set MONGODB_URI and restart backend."
+        });
+      }
+    } else if (!config.mongodbURI) {
+      return res.status(503).json({
+        message: "Database is not connected. Set MONGODB_URI and restart backend."
+      });
+    }
   }
   next();
 });
 
 
-// app.use('/api', authRoutes);
 app.use('/api', authRoutes);
+app.use('/api', catalogRoutes);
+app.use('/api', orderRoutes);
+app.use('/api', paymentRoutes);
+app.use('/api', tableRoutes);
+app.use('/api', tableReservationRoutes);
+app.use('/api', dishRoutes);
+app.use('/api', reviewRoutes);
+app.use('/api', adminRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
