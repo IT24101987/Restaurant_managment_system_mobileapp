@@ -20,14 +20,14 @@ Set these in your Vercel project settings:
 
 1. **Connect Repository**
    - Import this repository to Vercel
-   - Set the root directory to `backend/`
+   - **Important:** Do NOT set a root directory - leave it as the repository root
 
 2. **Configure Environment Variables**
    - Go to Project Settings > Environment Variables
    - Add all required environment variables
 
 3. **Deploy**
-   - Vercel will automatically detect the configuration and deploy
+   - Vercel will automatically detect the configuration in `vercel.json` and deploy the backend
 
 ### API Endpoints
 
@@ -39,6 +39,7 @@ After deployment, your API will be available at:
 ### Local Development
 
 ```bash
+cd backend
 npm install
 npm run dev  # Development with nodemon
 npm start    # Production
@@ -46,9 +47,10 @@ npm start    # Production
 
 ### Project Structure
 
-- `api/index.js` - Vercel serverless function entry point
-- `app.js` - Express application setup
-- `routes/` - API route handlers
-- `models/` - MongoDB models
-- `middlewares/` - Authentication and other middleware
-- `controllers/` - Route controllers
+- `backend/api/index.js` - Vercel serverless function entry point
+- `backend/app.js` - Express application setup
+- `backend/routes/` - API route handlers
+- `backend/models/` - MongoDB models
+- `backend/middlewares/` - Authentication and other middleware
+- `backend/controllers/` - Route controllers
+- `vercel.json` - Vercel deployment configuration
