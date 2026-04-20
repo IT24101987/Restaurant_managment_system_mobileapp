@@ -3,6 +3,44 @@ import DiningTable from "../models/diningTable.js";
 import Announcement from "../models/announcement.js";
 import Order from "../models/order.js";
 
+function normalizeSeatSlotLabel(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function formatLocalSlotFromDate(dateValue) {
+  const date = dateValue ? new Date(dateValue) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  let hour = date.getHours();
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const suffix = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+  return `${year}-${month}-${day} ${hour}:${minute} ${suffix}`;
+}
+
+function buildTableSeatUsageMaps(orders = []) {
+  const tableSeatUsage = {};
+  const tableSeatUsageBySlot = {};
+  for (const order of orders) {
+    const tableId = String(order?.tableId || "");
+    if (!tableId) continue;
+    const seats = Number(order?.seatCount || 1);
+    tableSeatUsage[tableId] = Number(tableSeatUsage[tableId] || 0) + seats;
+    const normalizedSlot =
+      normalizeSeatSlotLabel(order?.timeSlotLabel) ||
+      normalizeSeatSlotLabel(formatLocalSlotFromDate(order?.reservationStart));
+    if (!normalizedSlot) continue;
+    if (!tableSeatUsageBySlot[tableId]) {
+      tableSeatUsageBySlot[tableId] = {};
+    }
+    tableSeatUsageBySlot[tableId][normalizedSlot] =
+      Number(tableSeatUsageBySlot[tableId][normalizedSlot] || 0) + seats;
+  }
+  return { tableSeatUsage, tableSeatUsageBySlot };
+}
+
 export async function getCatalog(req, res) {
   try {
     const now = new Date();
@@ -62,27 +100,23 @@ export async function getCatalog(req, res) {
               { reservationEnd: { $exists: false } },
               { reservationEnd: { $gt: now } }
             ]
-          }).select("tableId seatCount").lean()
+          }).select("tableId seatCount timeSlotLabel reservationStart").lean()
           : Promise.resolve([])
       ]);
-      const tableSeatUsage = activeTableOrders.reduce((acc, order) => {
-        const tableId = String(order.tableId || "");
-        if (!tableId) return acc;
-        acc[tableId] = Number(acc[tableId] || 0) + Number(order.seatCount || 1);
-        return acc;
-      }, {});
+      const { tableSeatUsage, tableSeatUsageBySlot } = buildTableSeatUsageMaps(activeTableOrders);
       return res.json({
         dishes,
         tables,
         timeSlots: [],
         announcements: [],
-        tableSeatUsage
+        tableSeatUsage,
+        tableSeatUsageBySlot
       });
     }
 
     if (userMode) {
       const userDishLimit = includeDishTotal ? dishLimit : dishLimit + 1;
-      const [tables, rawDishes, dishTotal, announcements] = await Promise.all([
+      const [tables, rawDishes, dishTotal, announcements, activeTableOrders] = await Promise.all([
         tableQuery,
         Dish.find(dishFilter)
           .select(dishSelect)
@@ -97,6 +131,17 @@ export async function getCatalog(req, res) {
             .sort({ createdAt: -1 })
             .limit(announcementLimit)
             .lean()
+          : Promise.resolve([]),
+        includeSeatUsage
+          ? Order.find({
+            orderType: "table",
+            status: { $in: ["New", "Preparing", "Ready"] },
+            tableId: { $exists: true, $ne: null },
+            $or: [
+              { reservationEnd: { $exists: false } },
+              { reservationEnd: { $gt: now } }
+            ]
+          }).select("tableId seatCount timeSlotLabel reservationStart").lean()
           : Promise.resolve([])
       ]);
       const hasNextPage = includeDishTotal
@@ -106,6 +151,7 @@ export async function getCatalog(req, res) {
       const dishTotalPages = includeDishTotal
         ? Math.max(1, Math.ceil(Number(dishTotal || 0) / dishLimit))
         : null;
+      const { tableSeatUsage, tableSeatUsageBySlot } = buildTableSeatUsageMaps(activeTableOrders);
       return res.json({
         dishes,
         dishPagination: {
@@ -118,7 +164,8 @@ export async function getCatalog(req, res) {
         tables,
         timeSlots: [],
         announcements,
-        tableSeatUsage: {}
+        tableSeatUsage,
+        tableSeatUsageBySlot
       });
     }
 
@@ -144,21 +191,16 @@ export async function getCatalog(req, res) {
             { reservationEnd: { $exists: false } },
             { reservationEnd: { $gt: now } }
           ]
-        }).select("tableId seatCount").lean()
+        }).select("tableId seatCount timeSlotLabel reservationStart").lean()
         : Promise.resolve([])
     ]);
 
     const labels = [...new Set(slotRows.map((label) => String(label || "").trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
     const timeSlots = labels.map((label) => ({ label, isAvailable: true }));
-    const tableSeatUsage = activeTableOrders.reduce((acc, order) => {
-      const tableId = String(order.tableId || "");
-      if (!tableId) return acc;
-      acc[tableId] = Number(acc[tableId] || 0) + Number(order.seatCount || 1);
-      return acc;
-    }, {});
+    const { tableSeatUsage, tableSeatUsageBySlot } = buildTableSeatUsageMaps(activeTableOrders);
 
-    return res.json({ dishes, tables, timeSlots, announcements, tableSeatUsage });
+    return res.json({ dishes, tables, timeSlots, announcements, tableSeatUsage, tableSeatUsageBySlot });
   } catch (error) {
     return res.status(500).json({ message: "Failed to fetch catalog", error: error.message });
   }
