@@ -290,15 +290,55 @@ export async function updateOrder(req, res) {
     for (const key of allowedFields) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true }
-    );
-
-    if (!order) {
+    const existingOrder = await Order.findById(req.params.id);
+    if (!existingOrder) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    if (updates.items !== undefined) {
+      if (String(existingOrder.paymentStatus || "").toLowerCase() === "paid") {
+        return res.status(400).json({ message: "Cannot add or update dishes for paid orders" });
+      }
+
+      if (!Array.isArray(updates.items) || updates.items.length === 0) {
+        return res.status(400).json({ message: "items must be a non-empty array" });
+      }
+
+      for (const item of updates.items) {
+        if (!String(item?.name || "").trim()) {
+          return res.status(400).json({ message: "Each item must have a name" });
+        }
+        if (!Number.isInteger(Number(item?.quantity)) || Number(item.quantity) < 1) {
+          return res.status(400).json({ message: "Item quantity must be a positive integer" });
+        }
+        if (!Number.isFinite(Number(item?.price)) || Number(item.price) < 0) {
+          return res.status(400).json({ message: "Item price must be 0 or greater" });
+        }
+      }
+
+      const normalizedItems = updates.items.map((item) => ({
+        dishId: item.dishId,
+        name: String(item.name).trim(),
+        quantity: Number(item.quantity),
+        price: Number(item.price)
+      }));
+      updates.items = normalizedItems;
+
+      const itemsSubtotal = normalizedItems.reduce(
+        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+        0
+      );
+      const deliveryCharge =
+        String(existingOrder.orderType || "").toLowerCase() === "delivery" ? DELIVERY_FEE : 0;
+      updates.totalAmount = itemsSubtotal + deliveryCharge;
+    }
+
+    const order = await Order.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
     res.json({ message: "Order updated", order });
 
