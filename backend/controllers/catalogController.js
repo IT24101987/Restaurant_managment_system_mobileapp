@@ -116,7 +116,7 @@ export async function getCatalog(req, res) {
 
     if (userMode) {
       const userDishLimit = includeDishTotal ? dishLimit : dishLimit + 1;
-      const [tables, rawDishes, dishTotal, announcements, activeTableOrders] = await Promise.all([
+      const [tables, rawDishes, dishTotal, dishCategories, trendingDishes, announcements, activeTableOrders] = await Promise.all([
         tableQuery,
         Dish.find(dishFilter)
           .select(dishSelect)
@@ -125,6 +125,12 @@ export async function getCatalog(req, res) {
           .limit(userDishLimit)
           .lean(),
         includeDishTotal ? Dish.countDocuments(dishFilter) : Promise.resolve(null),
+        Dish.distinct("category", { category: { $exists: true, $ne: "" } }),
+        Dish.find({ isAvailable: { $ne: false }, isTrending: true })
+          .select(dishSelect)
+          .sort({ name: 1 })
+          .limit(3)
+          .lean(),
         includeAnnouncements
           ? Announcement.find(announcementFilter)
             .select("title message type createdAt")
@@ -154,6 +160,9 @@ export async function getCatalog(req, res) {
       const { tableSeatUsage, tableSeatUsageBySlot } = buildTableSeatUsageMaps(activeTableOrders);
       return res.json({
         dishes,
+        trendingDishes,
+        dishCategories: [...new Set((dishCategories || []).map((item) => String(item || "").trim()).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" })),
         dishPagination: {
           page: dishPage,
           limit: dishLimit,
