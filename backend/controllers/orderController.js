@@ -11,6 +11,7 @@ import {
   normalizeTimeLabel
 } from "../utils/reservation.js";
 const ALLOWED_SEAT_COUNTS = [1, 2, 3, 4, 6, 8];
+const DELIVERY_FEE = 250;
 
 //GET ALL ORDERS 
 
@@ -129,6 +130,12 @@ export async function createOrder(req, res) {
         };
       });
     }
+    const itemsSubtotal = orderItems.reduce(
+      (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+      0
+    );
+    const deliveryCharge = normalizedOrderType === "delivery" ? DELIVERY_FEE : 0;
+    const orderTotalAmount = itemsSubtotal + deliveryCharge;
 
     let normalizedSeatCount = Number(seatCount || 0);
     let resolvedReservationStart = null;
@@ -227,9 +234,32 @@ export async function createOrder(req, res) {
       deliveryAddress,
       paymentMethod: normalizedPaymentMethod,
       paymentStatus: initialPaymentStatus,
+      totalAmount: orderTotalAmount,
       items: orderItems,
       createdBy: req.user?.email || "system"
     });
+
+    if (normalizedOrderType === "delivery" && normalizedPaymentMethod === "card") {
+      const payment = await Payment.create({
+        paymentId: `PAY-${Date.now()}`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        phone: order.phone,
+        paymentMethod: "card",
+        subtotal: orderTotalAmount,
+        offerType: "fixed",
+        offerValue: 0,
+        discountAmount: 0,
+        taxPercent: 0,
+        taxAmount: 0,
+        totalAmount: orderTotalAmount,
+        paidBy: req.user?.email || "system"
+      });
+
+      order.paymentId = payment._id;
+      await order.save();
+    }
 
     res.status(201).json({ message: "Order created", order });
 
